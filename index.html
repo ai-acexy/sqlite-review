@@ -106,15 +106,25 @@
 
       <section class="workspace">
         <section class="panel editor-panel">
-          <div class="panel-title">
+          <div class="panel-title editor-panel-title">
             <span>SQL 编辑器</span>
+            <div class="editor-actions" aria-label="SQL 编辑器操作">
+              <button id="runBtn" type="button" class="run-btn" aria-label="运行 SQL" title="运行 SQL">
+                <span class="run-btn-icon" aria-hidden="true">▶</span>
+                <span>运行</span>
+              </button>
+              <button id="clearEditorBtn" type="button" class="editor-action-btn" aria-label="清空编辑器" title="清空编辑器">
+                清空
+              </button>
+            </div>
             <span class="editor-meta">
               <span id="queryMeta">0 chars</span>
-              <span id="queryHint" class="status-badge">Ctrl/Cmd + R 运行</span>
+              <span id="queryHint" class="status-badge">Ctrl/Cmd + E 运行</span>
             </span>
           </div>
           <div class="sql-editor-shell">
             <pre id="sqlHighlight" class="sql-highlighter" aria-hidden="true"></pre>
+            <div class="sql-editor-tip" aria-hidden="true">Ctrl/Cmd + E 运行</div>
             <textarea
               id="sqlEditor"
               spellcheck="false"

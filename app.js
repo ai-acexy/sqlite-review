@@ -1,5 +1,8 @@
 const THEME_KEY = "sqlite-review-theme";
 const WORKSPACE_SPLIT_KEY = "sqlite-review-workspace-split";
+const WORKSPACE_SQL_KEY = "sqlite-review-sql";
+const WORKSPACE_DB_KEY = "sqlite-review-workspace-db";
+const WORKSPACE_DB_NAME_KEY = "sqlite-review-workspace-db-name";
 const SAMPLE_DB_NAME = "sample.sqlite";
 const EMPTY_DB_NAME = "untitled.sqlite";
 
@@ -40,6 +43,8 @@ const newBtn = document.getElementById("newBtn");
 const sampleBtn = document.getElementById("sampleBtn");
 const clearWorkspaceBtn = document.getElementById("clearWorkspaceBtn");
 const exportBtn = document.getElementById("exportBtn");
+const runBtn = document.getElementById("runBtn");
+const clearEditorBtn = document.getElementById("clearEditorBtn");
 const fileInput = document.getElementById("fileInput");
 const dropZone = document.getElementById("dropZone");
 const sqlHighlight = document.getElementById("sqlHighlight");
@@ -67,6 +72,8 @@ let selectedTable = "";
 let currentTables = [];
 let workspaceDragState = null;
 let skipNextImportConfirmation = false;
+let editorContentSource = "empty";
+let lastAutoPreviewSql = "";
 
 const SQL_KEYWORDS = new Set(
   [
@@ -253,10 +260,68 @@ function isSelectLike(sql) {
 
 function debounce(fn, delay) {
   let timer = null;
-  return (...args) => {
+  const wrapped = (...args) => {
     clearTimeout(timer);
     timer = setTimeout(() => fn(...args), delay);
   };
+  wrapped.cancel = () => {
+    clearTimeout(timer);
+    timer = null;
+  };
+  return wrapped;
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function persistWorkspaceDb() {
+  if (!db) {
+    localStorage.removeItem(WORKSPACE_DB_KEY);
+    localStorage.removeItem(WORKSPACE_DB_NAME_KEY);
+    return;
+  }
+
+  try {
+    const bytes = db.export();
+    localStorage.setItem(WORKSPACE_DB_KEY, bytesToBase64(bytes));
+    localStorage.setItem(WORKSPACE_DB_NAME_KEY, currentDbName || "");
+  } catch (error) {
+    console.warn("Failed to persist workspace db:", error);
+    setQueryHint("数据库过大，暂未持久化", "is-warning");
+  }
+}
+
+function loadPersistedWorkspaceDb() {
+  const encoded = localStorage.getItem(WORKSPACE_DB_KEY);
+  if (!encoded) {
+    return null;
+  }
+
+  try {
+    const bytes = base64ToBytes(encoded);
+    const name = localStorage.getItem(WORKSPACE_DB_NAME_KEY) || EMPTY_DB_NAME;
+    return { bytes, name };
+  } catch (error) {
+    console.warn("Failed to load persisted workspace db:", error);
+    localStorage.removeItem(WORKSPACE_DB_KEY);
+    localStorage.removeItem(WORKSPACE_DB_NAME_KEY);
+    return null;
+  }
 }
 
 function escapeHtmlPreserveSpaces(value) {
@@ -407,7 +472,8 @@ function resetWorkspaceView(statusText = "工作区已清空", statusType = "is-
   selectedTable = "";
   currentTables = [];
   sqlEditor.value = "";
-  localStorage.removeItem("sqlite-review-sql");
+  debouncedSave.cancel();
+  localStorage.removeItem(WORKSPACE_SQL_KEY);
   queryMeta.textContent = "0 chars";
   dbName.textContent = "";
   dbSize.textContent = "0 KB";
@@ -429,14 +495,16 @@ function resetWorkspaceView(statusText = "工作区已清空", statusType = "is-
   updateStatus(statusText, statusType);
   renderSqlHighlight();
   syncSqlEditorScroll();
+  persistWorkspaceDb();
 }
 
 function renderLoadedWorkspace(message, type = "is-success") {
   updateStatus(message, type);
-  refreshSummary();
   currentTables = getTables();
+  refreshSummary();
   renderTableList();
   renderSchemaPanel(selectedTable);
+  persistWorkspaceDb();
 }
 
 function createEmptyDb() {
@@ -448,7 +516,7 @@ function createEmptyDb() {
   selectedTable = "";
   renderLoadedWorkspace("已创建空数据库", "is-success");
   renderMessage("空数据库已创建，可以继续执行 SQL。", "info");
-  setQueryHint("Ctrl/Cmd + R 运行", "is-success");
+  setQueryHint("Ctrl/Cmd + E 运行", "is-success");
 }
 
 function importDbFromBytes(bytes, name = EMPTY_DB_NAME) {
@@ -460,7 +528,7 @@ function importDbFromBytes(bytes, name = EMPTY_DB_NAME) {
   selectedTable = "";
   renderLoadedWorkspace("数据库已导入", "is-success");
   renderMessage("数据库已导入，可以继续查询或修改。", "info");
-  setQueryHint("Ctrl/Cmd + R 运行", "is-success");
+  setQueryHint("Ctrl/Cmd + E 运行", "is-success");
 }
 
 function createSampleDb() {
@@ -472,11 +540,13 @@ function createSampleDb() {
   selectedTable = "";
   try {
     sqlEditor.value = SAMPLE_SQL;
+    editorContentSource = "auto";
+    lastAutoPreviewSql = SAMPLE_SQL;
     renderQueryMeta(sqlEditor.value);
     renderSqlHighlight();
     executeSql();
     renderLoadedWorkspace("示例数据库已载入", "is-success");
-    setQueryHint("Ctrl/Cmd + R 运行", "is-success");
+    setQueryHint("Ctrl/Cmd + E 运行", "is-success");
   } catch (error) {
     console.error(error);
     updateStatus("示例数据库加载失败", "is-error");
@@ -495,9 +565,9 @@ function refreshSummary() {
   const bytes = getDbExportBytes();
   dbName.textContent = currentDbName || "";
   dbSize.textContent = formatBytes(bytes.length);
-  const tableCountValue = currentTables.length;
+  const tableCountValue = currentTables.filter((item) => item.type === "table").length;
   tableCount.textContent = String(tableCountValue);
-  dbState.textContent = db ? (tableCountValue > 0 ? "可查询" : "空库") : "未加载";
+  dbState.textContent = db ? (currentTables.length > 0 ? "可查询" : "空库") : "未加载";
 }
 
 function renderTableList() {
@@ -508,7 +578,10 @@ function renderTableList() {
     return;
   }
 
-  tableMeta.textContent = `${currentTables.length} 张表`;
+  const tableCountValue = currentTables.filter((item) => item.type === "table").length;
+  const viewCountValue = currentTables.filter((item) => item.type === "view").length;
+  tableMeta.textContent =
+    viewCountValue > 0 ? `${tableCountValue} 张表 · ${viewCountValue} 个视图` : `${tableCountValue} 张表`;
   const wrapper = document.createElement("div");
   wrapper.className = "table-list";
 
@@ -686,16 +759,39 @@ function selectTable(name) {
   selectedTable = name;
   renderTableList();
   renderSchemaPanel(name);
-  sqlEditor.value = `SELECT * FROM ${normalizeIdentifier(name)} LIMIT 5;`;
-  renderQueryMeta(sqlEditor.value);
-  renderSqlHighlight();
-  syncSqlEditorScroll();
-  setQueryHint("表已选中，按 Ctrl/Cmd + R 运行", "is-success");
+  const previewSql = `SELECT * FROM ${normalizeIdentifier(name)} LIMIT 5;`;
+  const currentSql = sqlEditor.value.trim();
+  const shouldApplyPreview = !currentSql || editorContentSource !== "user" || currentSql === lastAutoPreviewSql;
+
+  if (shouldApplyPreview) {
+    sqlEditor.value = previewSql;
+    renderQueryMeta(sqlEditor.value);
+    renderSqlHighlight();
+    syncSqlEditorScroll();
+    editorContentSource = "auto";
+    lastAutoPreviewSql = previewSql;
+    setQueryHint("表已选中，按 Ctrl/Cmd + E 运行", "is-success");
+  } else {
+    setQueryHint("表已选中，已保留当前 SQL", "is-success");
+  }
   renderTablePreview(name);
 }
 
 function renderQueryMeta(text) {
   queryMeta.textContent = `${text.length} chars`;
+}
+
+function clearEditorContent() {
+  sqlEditor.value = "";
+  debouncedSave.cancel();
+  localStorage.removeItem(WORKSPACE_SQL_KEY);
+  editorContentSource = "empty";
+  lastAutoPreviewSql = "";
+  renderQueryMeta(sqlEditor.value);
+  renderSqlHighlight();
+  syncSqlEditorScroll();
+  setQueryHint("Ctrl/Cmd + E 运行", "");
+  sqlEditor.focus();
 }
 
 function executeSql(forcedSql) {
@@ -742,6 +838,7 @@ function executeSql(forcedSql) {
 
     setQueryHint(selectLike ? "查询成功" : "执行成功", "is-success");
     updateStatus(selectLike ? "已查询" : "已修改", selectLike ? "is-success" : "is-warning");
+    persistWorkspaceDb();
   } catch (error) {
     console.error(error);
     setResultStatus("执行失败", "is-error");
@@ -752,20 +849,21 @@ function executeSql(forcedSql) {
 }
 
 const debouncedSave = debounce((value) => {
-  localStorage.setItem("sqlite-review-sql", value);
+  localStorage.setItem(WORKSPACE_SQL_KEY, value);
 }, 150);
 
 sqlEditor.addEventListener("input", (event) => {
   renderQueryMeta(event.target.value);
   renderSqlHighlight();
   syncSqlEditorScroll();
+  editorContentSource = event.target.value.trim() ? "user" : "empty";
   debouncedSave(event.target.value);
   setQueryHint("等待执行", "");
 });
 
 sqlEditor.addEventListener("keydown", (event) => {
   const isRunHotkey =
-    (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "r";
+    (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "e";
   if (!isRunHotkey) {
     return;
   }
@@ -877,6 +975,14 @@ exportBtn.addEventListener("click", () => {
   updateStatus("已导出", "is-success");
 });
 
+runBtn.addEventListener("click", () => {
+  executeSql();
+});
+
+clearEditorBtn.addEventListener("click", () => {
+  clearEditorContent();
+});
+
 function bindWorkspaceSplitter() {
   if (!workspace || !workspaceSplitter) {
     return;
@@ -924,9 +1030,12 @@ function initFromStorage() {
   const theme = localStorage.getItem(THEME_KEY) || "light";
   applyTheme(theme);
   applyWorkspaceSplit(getWorkspaceSplit());
-  sqlEditor.value = "";
+  sqlEditor.value = localStorage.getItem(WORKSPACE_SQL_KEY) || "";
+  editorContentSource = sqlEditor.value.trim() ? "user" : "empty";
+  lastAutoPreviewSql = "";
   renderQueryMeta(sqlEditor.value);
   renderSqlHighlight();
+  setQueryHint("Ctrl/Cmd + E 运行", "");
 }
 
 async function initSqlJsRuntime() {
@@ -944,8 +1053,26 @@ async function bootstrap() {
   initFromStorage();
   await initSqlJsRuntime();
   bindWorkspaceSplitter();
-  resetWorkspaceView("未加载", "");
+  const restored = loadPersistedWorkspaceDb();
+  if (restored) {
+    db = new sqlJsModule.Database(restored.bytes);
+    currentDbName = restored.name;
+    selectedTable = "";
+    renderLoadedWorkspace("已恢复工作区", "is-success");
+    renderMessage("已从本地恢复上次的数据库与编辑内容。", "info");
+  } else {
+    resetWorkspaceView("未加载", "");
+  }
 }
+
+window.addEventListener("beforeunload", (event) => {
+  if (!hasWorkspaceContent()) {
+    return;
+  }
+
+  event.preventDefault();
+  event.returnValue = "";
+});
 
 bootstrap().catch((error) => {
   console.error(error);

@@ -424,6 +424,54 @@ button:disabled {
   justify-content: flex-end;
 }
 
+.run-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+  background: color-mix(in srgb, var(--success-soft) 62%, var(--surface));
+  color: var(--success);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.run-btn:hover {
+  border-color: var(--success);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success-soft) 78%, var(--surface));
+}
+
+.run-btn-icon {
+  font-size: 11px;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.editor-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+}
+
+.editor-action-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--accent-soft));
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.editor-action-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .sql-editor-shell {
   position: relative;
   flex: 1 1 auto;
@@ -462,6 +510,22 @@ button:disabled {
   min-height: 100%;
 }
 
+.sql-editor-tip {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  z-index: 2;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
 .sql-token-keyword {
   color: var(--accent);
   font-weight: 700;
@@ -498,7 +562,7 @@ button:disabled {
   background: transparent;
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
 }
 
 #sqlEditor:focus {
@@ -507,6 +571,45 @@ button:disabled {
 
 #sqlEditor::placeholder {
   color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+
+body[data-theme="dark"] .sql-editor-tip {
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.28);
+}
+
+.editor-panel-title {
+  gap: 12px;
+}
+
+.editor-panel-title > :first-child {
+  flex: 0 0 auto;
+}
+
+.editor-panel-title .editor-actions {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.editor-panel-title .editor-meta {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .editor-panel-title {
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .editor-panel-title .editor-actions {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .editor-panel-title .editor-meta {
+    margin-left: auto;
+  }
 }
 
 .workspace-splitter {
