@@ -467,6 +467,40 @@ button:disabled {
   line-height: 1;
 }
 
+.format-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface));
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.format-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 88%, var(--surface));
+}
+
+.copy-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
+  background: color-mix(in srgb, var(--warning-soft) 64%, var(--surface));
+  color: var(--warning);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.copy-btn:hover {
+  border-color: var(--warning);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning-soft) 82%, var(--surface));
+}
+
 .editor-action-btn:hover {
   background: var(--accent-soft);
   color: var(--accent);

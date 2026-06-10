@@ -44,6 +44,8 @@ const sampleBtn = document.getElementById("sampleBtn");
 const clearWorkspaceBtn = document.getElementById("clearWorkspaceBtn");
 const exportBtn = document.getElementById("exportBtn");
 const runBtn = document.getElementById("runBtn");
+const formatEditorBtn = document.getElementById("formatEditorBtn");
+const copyEditorBtn = document.getElementById("copyEditorBtn");
 const clearEditorBtn = document.getElementById("clearEditorBtn");
 const fileInput = document.getElementById("fileInput");
 const dropZone = document.getElementById("dropZone");
@@ -74,6 +76,35 @@ let workspaceDragState = null;
 let skipNextImportConfirmation = false;
 let editorContentSource = "empty";
 let lastAutoPreviewSql = "";
+let workspaceDirty = false;
+let unloadProtectionBound = false;
+
+function beforeUnloadHandler(event) {
+  if (!workspaceDirty) {
+    return;
+  }
+
+  event.preventDefault();
+  event.returnValue = true;
+}
+
+function syncUnloadProtection() {
+  if (workspaceDirty && !unloadProtectionBound) {
+    window.addEventListener("beforeunload", beforeUnloadHandler);
+    unloadProtectionBound = true;
+    return;
+  }
+
+  if (!workspaceDirty && unloadProtectionBound) {
+    window.removeEventListener("beforeunload", beforeUnloadHandler);
+    unloadProtectionBound = false;
+  }
+}
+
+function setWorkspaceDirty() {
+  workspaceDirty = Boolean(db) || Boolean(sqlEditor.value.trim());
+  syncUnloadProtection();
+}
 
 const SQL_KEYWORDS = new Set(
   [
@@ -201,6 +232,24 @@ const SQL_KEYWORDS = new Set(
 );
 
 const SQL_LITERALS = new Set(["TRUE", "FALSE", "NULL"]);
+const SQL_FUNCTION_NAMES = new Set([
+  "COUNT",
+  "MAX",
+  "MIN",
+  "AVG",
+  "SUM",
+  "TOTAL",
+  "LENGTH",
+  "UPPER",
+  "LOWER",
+  "COALESCE",
+  "IFNULL",
+  "ROUND",
+  "ABS",
+  "SUBSTR",
+  "PRINTF",
+]);
+const SQL_FORMAT_JOIN_PREFIXES = new Set(["LEFT", "RIGHT", "INNER", "OUTER", "FULL", "CROSS", "NATURAL"]);
 
 function applyTheme(theme) {
   document.body.setAttribute("data-theme", theme);
@@ -401,7 +450,7 @@ function highlightSql(sql) {
         } else if (SQL_KEYWORDS.has(upper)) {
           const isFunctionName =
             source[index + match[0].length] === "(" &&
-            ["COUNT", "MAX", "MIN", "AVG", "SUM", "TOTAL", "LENGTH", "UPPER", "LOWER", "COALESCE", "IFNULL", "ROUND"].includes(upper);
+            SQL_FUNCTION_NAMES.has(upper);
           push(isFunctionName ? "sql-token-function" : "sql-token-keyword", match[0]);
         } else {
           push("sql-token-identifier", match[0]);
@@ -496,6 +545,7 @@ function resetWorkspaceView(statusText = "工作区已清空", statusType = "is-
   renderSqlHighlight();
   syncSqlEditorScroll();
   persistWorkspaceDb();
+  setWorkspaceDirty(hasWorkspaceContent());
 }
 
 function renderLoadedWorkspace(message, type = "is-success") {
@@ -505,6 +555,7 @@ function renderLoadedWorkspace(message, type = "is-success") {
   renderTableList();
   renderSchemaPanel(selectedTable);
   persistWorkspaceDb();
+  setWorkspaceDirty(hasWorkspaceContent());
 }
 
 function createEmptyDb() {
@@ -770,6 +821,7 @@ function selectTable(name) {
     syncSqlEditorScroll();
     editorContentSource = "auto";
     lastAutoPreviewSql = previewSql;
+    setWorkspaceDirty(hasWorkspaceContent());
     setQueryHint("表已选中，选中后执行", "is-success");
   } else {
     setQueryHint("表已选中，已保留当前 SQL", "is-success");
@@ -792,6 +844,465 @@ function renderQueryMeta(text) {
   queryMeta.textContent = selectedSql
     ? `${text.length} chars · 选中 ${selectedSql.length} chars`
     : `${text.length} chars`;
+}
+
+function tokenizeSqlText(sql) {
+  const tokens = [];
+  let index = 0;
+
+  while (index < sql.length) {
+    const char = sql[index];
+    const next = sql[index + 1];
+
+    if (/\s/.test(char)) {
+      let cursor = index + 1;
+      while (cursor < sql.length && /\s/.test(sql[cursor])) {
+        cursor += 1;
+      }
+      tokens.push({ type: "space", value: sql.slice(index, cursor) });
+      index = cursor;
+      continue;
+    }
+
+    if (char === "-" && next === "-") {
+      let cursor = index + 2;
+      while (cursor < sql.length && sql[cursor] !== "\n") {
+        cursor += 1;
+      }
+      tokens.push({ type: "comment", value: sql.slice(index, cursor) });
+      index = cursor;
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      let cursor = index + 2;
+      while (cursor < sql.length && !(sql[cursor] === "*" && sql[cursor + 1] === "/")) {
+        cursor += 1;
+      }
+      cursor = Math.min(sql.length, cursor + 2);
+      tokens.push({ type: "comment", value: sql.slice(index, cursor) });
+      index = cursor;
+      continue;
+    }
+
+    if (char === "'" || char === '"' || char === "`") {
+      const quote = char;
+      let cursor = index + 1;
+      while (cursor < sql.length) {
+        if (sql[cursor] === quote) {
+          if (sql[cursor + 1] === quote) {
+            cursor += 2;
+            continue;
+          }
+          cursor += 1;
+          break;
+        }
+        cursor += 1;
+      }
+      tokens.push({ type: "string", value: sql.slice(index, cursor) });
+      index = cursor;
+      continue;
+    }
+
+    if (char === "[") {
+      let cursor = index + 1;
+      while (cursor < sql.length) {
+        if (sql[cursor] === "]") {
+          if (sql[cursor + 1] === "]") {
+            cursor += 2;
+            continue;
+          }
+          cursor += 1;
+          break;
+        }
+        cursor += 1;
+      }
+      tokens.push({ type: "string", value: sql.slice(index, cursor) });
+      index = cursor;
+      continue;
+    }
+
+    if (/[0-9]/.test(char)) {
+      const match = sql.slice(index).match(/^\d+(?:\.\d+)?(?:e[+-]?\d+)?/i);
+      if (match) {
+        tokens.push({ type: "number", value: match[0] });
+        index += match[0].length;
+        continue;
+      }
+    }
+
+    if (/[A-Za-z_]/.test(char)) {
+      const match = sql.slice(index).match(/^[A-Za-z_][A-Za-z0-9_$]*/);
+      if (match) {
+        tokens.push({ type: "word", value: match[0] });
+        index += match[0].length;
+        continue;
+      }
+    }
+
+    tokens.push({ type: "symbol", value: char });
+    index += 1;
+  }
+
+  return tokens;
+}
+
+function splitSqlStatements(sql) {
+  const statements = [];
+  let start = 0;
+  let index = 0;
+  let quote = "";
+  let comment = "";
+
+  while (index < sql.length) {
+    const char = sql[index];
+    const next = sql[index + 1];
+
+    if (comment === "line") {
+      if (char === "\n") {
+        comment = "";
+      }
+      index += 1;
+      continue;
+    }
+
+    if (comment === "block") {
+      if (char === "*" && next === "/") {
+        comment = "";
+        index += 2;
+        continue;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote) {
+        if (sql[index + 1] === quote) {
+          index += 2;
+          continue;
+        }
+        quote = "";
+      }
+      index += 1;
+      continue;
+    }
+
+    if (char === "-" && next === "-") {
+      comment = "line";
+      index += 2;
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      comment = "block";
+      index += 2;
+      continue;
+    }
+
+    if (char === "'" || char === '"' || char === "`") {
+      quote = char;
+      index += 1;
+      continue;
+    }
+
+    if (char === ";") {
+      const statement = sql.slice(start, index + 1).trim();
+      if (statement) {
+        statements.push(statement);
+      }
+      start = index + 1;
+    }
+
+    index += 1;
+  }
+
+  const tail = sql.slice(start).trim();
+  if (tail) {
+    statements.push(tail);
+  }
+
+  return statements;
+}
+
+function formatSqlStatement(statement) {
+  const source = String(statement || "").trim();
+  if (!source) {
+    return "";
+  }
+
+  const hasSemicolon = /;\s*$/.test(source);
+  const body = hasSemicolon ? source.replace(/;\s*$/, "") : source;
+  const tokens = tokenizeSqlText(body);
+  if (!tokens.length) {
+    return hasSemicolon ? ";" : "";
+  }
+
+  const lines = [];
+  let line = "";
+  let parenDepth = 0;
+  let clauseIndent = 0;
+  let previousWord = "";
+
+  const breakBeforeKeywords = new Set([
+    "SELECT",
+    "FROM",
+    "WHERE",
+    "GROUP",
+    "HAVING",
+    "ORDER",
+    "LIMIT",
+    "VALUES",
+    "SET",
+    "RETURNING",
+    "UNION",
+    "INTERSECT",
+    "EXCEPT",
+    "ON",
+    "WHEN",
+    "ELSE",
+    "THEN",
+    "AND",
+    "OR",
+    "JOIN",
+  ]);
+
+  const startLine = (indent = parenDepth + clauseIndent) => {
+    line = "  ".repeat(Math.max(0, indent));
+  };
+
+  const flushLine = () => {
+    const trimmed = line.trimEnd();
+    if (trimmed) {
+      lines.push(trimmed);
+    }
+    line = "";
+  };
+
+  const ensureLine = () => {
+    if (!line) {
+      startLine();
+    }
+  };
+
+  const newline = (indent = parenDepth + clauseIndent) => {
+    flushLine();
+    startLine(indent);
+  };
+
+  const append = (text) => {
+    ensureLine();
+    line += text;
+  };
+
+  const appendSpaceIfNeeded = () => {
+    if (!line || /[\s(./+\-]$/.test(line)) {
+      return;
+    }
+    line += " ";
+  };
+
+  const appendKeyword = (value) => {
+    const upper = value.toUpperCase();
+    const shouldBreak =
+      breakBeforeKeywords.has(upper) &&
+      !(upper === "FROM" && previousWord === "DELETE") &&
+      !(upper === "JOIN" && SQL_FORMAT_JOIN_PREFIXES.has(previousWord));
+
+    if (shouldBreak && line.trim()) {
+      newline();
+    }
+
+    appendSpaceIfNeeded();
+    append(upper);
+
+    if (upper === "SELECT") {
+      clauseIndent = 1;
+    } else if (upper === "WHERE" || upper === "HAVING" || upper === "ON" || upper === "VALUES" || upper === "SET" || upper === "RETURNING") {
+      clauseIndent = 1;
+    } else if (upper === "FROM" || upper === "GROUP" || upper === "ORDER" || upper === "LIMIT" || upper === "UNION" || upper === "INTERSECT" || upper === "EXCEPT") {
+      clauseIndent = 0;
+    } else if (upper === "AND" || upper === "OR") {
+      clauseIndent = Math.max(clauseIndent, 1);
+    }
+
+    previousWord = upper;
+  };
+
+  for (const token of tokens) {
+    if (token.type === "space") {
+      continue;
+    }
+
+    if (token.type === "comment") {
+      if (line.trim()) {
+        flushLine();
+      }
+      const commentLines = token.value.split(/\r?\n/);
+      commentLines.forEach((commentLine, commentIndex) => {
+        if (!line) {
+          startLine();
+        }
+        append(commentLine.trimEnd());
+        if (commentIndex < commentLines.length - 1) {
+          flushLine();
+        }
+      });
+      flushLine();
+      previousWord = "";
+      continue;
+    }
+
+    if (token.type === "symbol") {
+      if (token.value === ";") {
+        append(";");
+        flushLine();
+        previousWord = "";
+        continue;
+      }
+
+      if (token.value === ",") {
+        append(",");
+        newline();
+        previousWord = "";
+        continue;
+      }
+
+      if (token.value === "(") {
+        if (previousWord && !SQL_FUNCTION_NAMES.has(previousWord)) {
+          appendSpaceIfNeeded();
+        }
+        append("(");
+        parenDepth += 1;
+        previousWord = "";
+        continue;
+      }
+
+      if (token.value === ")") {
+        parenDepth = Math.max(0, parenDepth - 1);
+        line = line.trimEnd();
+        append(")");
+        previousWord = "";
+        continue;
+      }
+
+      if ("=<>+-*/%".includes(token.value)) {
+        appendSpaceIfNeeded();
+        append(token.value);
+        append(" ");
+        previousWord = "";
+        continue;
+      }
+
+      append(token.value);
+      previousWord = "";
+      continue;
+    }
+
+    if (token.type === "number" || token.type === "string") {
+      appendSpaceIfNeeded();
+      append(token.value);
+      previousWord = token.value.toUpperCase();
+      continue;
+    }
+
+    if (token.type === "word") {
+      appendKeyword(token.value);
+    }
+  }
+
+  flushLine();
+
+  const formatted = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  if (!formatted) {
+    return hasSemicolon ? ";" : "";
+  }
+
+  return hasSemicolon ? `${formatted};` : formatted;
+}
+
+function formatSqlDocument(sql) {
+  const statements = splitSqlStatements(sql);
+  if (!statements.length) {
+    return "";
+  }
+
+  return statements
+    .map((statement) => formatSqlStatement(statement))
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
+
+function formatEditorContent() {
+  const start = sqlEditor.selectionStart ?? 0;
+  const end = sqlEditor.selectionEnd ?? 0;
+  const hasSelection = end > start;
+  const source = hasSelection ? sqlEditor.value.slice(start, end) : sqlEditor.value;
+  const formatted = formatSqlDocument(source);
+
+  if (!source.trim() || !formatted) {
+    setQueryHint("没有可格式化的 SQL", "is-warning");
+    return;
+  }
+
+  debouncedSave.cancel();
+
+  if (hasSelection) {
+    const before = sqlEditor.value.slice(0, start);
+    const after = sqlEditor.value.slice(end);
+    sqlEditor.value = `${before}${formatted}${after}`;
+    sqlEditor.setSelectionRange(start, start + formatted.length);
+  } else {
+    sqlEditor.value = formatted;
+    sqlEditor.setSelectionRange(sqlEditor.value.length, sqlEditor.value.length);
+  }
+
+  localStorage.setItem(WORKSPACE_SQL_KEY, sqlEditor.value);
+  editorContentSource = sqlEditor.value.trim() ? "user" : "empty";
+  lastAutoPreviewSql = "";
+  setWorkspaceDirty(hasWorkspaceContent());
+  renderQueryMeta(sqlEditor.value);
+  renderSqlHighlight();
+  syncSqlEditorScroll();
+  refreshEditorStatus();
+  setQueryHint(hasSelection ? "已格式化选中 SQL" : "已格式化 SQL", "is-success");
+  sqlEditor.focus();
+}
+
+async function copyEditorContent() {
+  const text = sqlEditor.value || "";
+  if (!text.trim()) {
+    setQueryHint("没有可复制的 SQL", "is-warning");
+    return;
+  }
+
+  try {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const temp = document.createElement("textarea");
+      temp.value = text;
+      temp.setAttribute("readonly", "true");
+      temp.style.position = "fixed";
+      temp.style.opacity = "0";
+      temp.style.pointerEvents = "none";
+      temp.style.left = "-9999px";
+      document.body.appendChild(temp);
+      temp.focus();
+      temp.select();
+      const copied = document.execCommand("copy");
+      temp.remove();
+      if (!copied) {
+        throw new Error("复制失败");
+      }
+    }
+
+    setQueryHint("已复制编辑区 SQL", "is-success");
+  } catch (error) {
+    console.error(error);
+    setQueryHint("复制失败", "is-error");
+  }
 }
 
 function refreshEditorStatus() {
@@ -883,6 +1394,8 @@ function executeSql(forcedSql) {
     );
     updateStatus(selectLike ? "已查询" : "已修改", selectLike ? "is-success" : "is-warning");
     persistWorkspaceDb();
+    localStorage.setItem(WORKSPACE_SQL_KEY, sqlEditor.value);
+    setWorkspaceDirty(hasWorkspaceContent());
   } catch (error) {
     console.error(error);
     setResultStatus("执行失败", "is-error");
@@ -894,6 +1407,7 @@ function executeSql(forcedSql) {
 
 const debouncedSave = debounce((value) => {
   localStorage.setItem(WORKSPACE_SQL_KEY, value);
+  setWorkspaceDirty(hasWorkspaceContent());
 }, 150);
 
 sqlEditor.addEventListener("input", (event) => {
@@ -901,6 +1415,7 @@ sqlEditor.addEventListener("input", (event) => {
   renderSqlHighlight();
   syncSqlEditorScroll();
   editorContentSource = event.target.value.trim() ? "user" : "empty";
+  setWorkspaceDirty(true);
   debouncedSave(event.target.value);
   refreshEditorStatus();
 });
@@ -1027,6 +1542,14 @@ runBtn.addEventListener("click", () => {
   executeSql();
 });
 
+formatEditorBtn.addEventListener("click", () => {
+  formatEditorContent();
+});
+
+copyEditorBtn.addEventListener("click", () => {
+  copyEditorContent();
+});
+
 clearEditorBtn.addEventListener("click", () => {
   clearEditorContent();
 });
@@ -1113,13 +1636,22 @@ async function bootstrap() {
   }
 }
 
-window.addEventListener("beforeunload", (event) => {
-  if (!hasWorkspaceContent()) {
+window.addEventListener("pagehide", () => {
+  if (!workspaceDirty) {
     return;
   }
 
-  event.preventDefault();
-  event.returnValue = "";
+  persistWorkspaceDb();
+  localStorage.setItem(WORKSPACE_SQL_KEY, sqlEditor.value);
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "hidden" || !workspaceDirty) {
+    return;
+  }
+
+  persistWorkspaceDb();
+  localStorage.setItem(WORKSPACE_SQL_KEY, sqlEditor.value);
 });
 
 bootstrap().catch((error) => {

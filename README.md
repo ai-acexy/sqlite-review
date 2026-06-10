@@ -21,7 +21,7 @@ I created this minimal SQLite online preview and editing project for loading, qu
 - I moved table preview results into the main result area
 - I added SQL syntax highlighting in the editor
 - I added a draggable splitter to adjust the SQL and result area ratio
-- I added run and clear-editor actions in the SQL editor toolbar, plus a `Cmd/Ctrl + E` shortcut for executing selected SQL
+- I added run, format, copy, and clear-editor actions in the SQL editor toolbar, plus a `Cmd/Ctrl + E` shortcut for executing selected SQL
 - I added database export to `.sqlite`
 - I added a workspace clear action with confirmation for destructive changes
 - I added confirmation prompts before replacing existing workspace data
@@ -36,7 +36,8 @@ I created this minimal SQLite online preview and editing project for loading, qu
 1. Open `index.html` directly in a browser.
 2. Import a SQLite file or create a new empty database.
 3. Select the SQL you want to run, then press `Cmd/Ctrl + E` or click the run button in the SQL editor toolbar.
-4. View query results, schema details, and table previews in the right panel.
+4. Click the format button to pretty-print the editor SQL; multiple statements are formatted separately.
+5. View query results, schema details, and table previews in the right panel.
 
 ## Project Structure
 
