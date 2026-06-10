@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SQLite Review</title>
+    <meta
+      name="description"
+      content="在线 SQLite 预览与编辑工具，支持上传数据库、执行 SQL、查看表结构并导出 .sqlite 文件。"
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="./public/assets/favicon.svg"
+    />
+    <link rel="shortcut icon" href="./public/assets/favicon.svg" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <h1>SQLite Review</h1>
+        <p>在线预览、查询、修改与导出 SQLite 数据库</p>
+      </div>
+      <div class="actions">
+        <button id="themeBtn" type="button">夜间模式</button>
+        <button id="importBtn" type="button">导入 SQLite</button>
+        <button id="newBtn" type="button">新建空库</button>
+        <button id="sampleBtn" type="button">载入示例</button>
+        <button id="clearWorkspaceBtn" type="button" class="danger-btn">清空工作区</button>
+        <button id="exportBtn" type="button">导出数据库</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel sidebar">
+        <div class="panel-title">
+          <span>数据库</span>
+          <span id="dbBadge" class="status-badge">未加载</span>
+        </div>
+
+        <div class="sidebar-body">
+          <section class="hero-card">
+            <h2>导入或创建数据库</h2>
+            <p>
+              支持上传现有 <code>.sqlite</code> / <code>.db</code> 文件，也可以直接新建空库后执行 SQL 并导出。
+            </p>
+            <input id="fileInput" type="file" accept=".sqlite,.db,.sqlite3,.db3,application/octet-stream" hidden />
+            <div id="dropZone" class="drop-zone" role="button" tabindex="0" aria-label="上传 SQLite 文件">
+              点击或拖拽 SQLite 文件到这里
+            </div>
+          </section>
+
+          <section class="summary-grid" aria-label="数据库信息">
+            <div class="summary-card">
+              <span class="summary-label">数据库名</span>
+              <strong id="dbName"></strong>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">表数量</span>
+              <strong id="tableCount">0</strong>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">大小</span>
+              <strong id="dbSize">0 KB</strong>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">状态</span>
+              <strong id="dbState">未加载</strong>
+            </div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-head">
+              <h3>表列表</h3>
+              <span id="tableMeta" class="muted-text">暂无表</span>
+            </div>
+            <div id="tableList" class="list-card empty-card">
+              当前没有表。执行 `CREATE TABLE` 即可开始。
+            </div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-head">
+              <h3>表结构</h3>
+              <span id="schemaMeta" class="muted-text">未选择表</span>
+            </div>
+            <div id="schemaPanel" class="schema-card empty-card">
+              选择左侧表后，这里会显示字段定义。
+            </div>
+          </section>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <section class="panel editor-panel">
+          <div class="panel-title">
+            <span>SQL 编辑器</span>
+            <span class="editor-meta">
+              <span id="queryMeta">0 chars</span>
+              <span id="queryHint" class="status-badge">Ctrl/Cmd + R 运行</span>
+            </span>
+          </div>
+          <div class="sql-editor-shell">
+            <pre id="sqlHighlight" class="sql-highlighter" aria-hidden="true"></pre>
+            <textarea
+              id="sqlEditor"
+              spellcheck="false"
+              aria-label="SQL 编辑器"
+              placeholder="输入 SQL，例如：\nCREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);\nINSERT INTO users (name) VALUES ('Alice');\nSELECT * FROM users;"
+            ></textarea>
+          </div>
+        </section>
+
+        <button id="workspaceSplitter" class="workspace-splitter" type="button" aria-label="调整 SQL 和结果区域比例" title="拖动调整 SQL 和结果区域比例"></button>
+
+        <section class="panel result-panel">
+            <div class="panel-title">
+            <span>执行结果</span>
+            <span id="resultMeta" class="status-badge">未加载</span>
+          </div>
+          <div id="resultArea" class="result-area empty-card">
+            执行 SQL 后，结果会在这里显示。查询语句会渲染为表格，修改语句会显示变更信息。
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./bootstrap.js"></script>
+  </body>
+</html>
