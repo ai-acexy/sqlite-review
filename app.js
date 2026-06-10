@@ -686,7 +686,7 @@ function selectTable(name) {
   selectedTable = name;
   renderTableList();
   renderSchemaPanel(name);
-  sqlEditor.value = `SELECT * FROM ${normalizeIdentifier(name)} LIMIT 100;`;
+  sqlEditor.value = `SELECT * FROM ${normalizeIdentifier(name)} LIMIT 5;`;
   renderQueryMeta(sqlEditor.value);
   renderSqlHighlight();
   syncSqlEditorScroll();
@@ -718,6 +718,7 @@ function executeSql(forcedSql) {
     const results = db.exec(sqlText);
     const selectLike = isSelectLike(sqlText);
     const ddlLike = /^(create|drop|alter|rename|vacuum|reindex|attach|detach)\b/i.test(sqlText);
+    const rowsModified = typeof db.getRowsModified === "function" ? db.getRowsModified() : 0;
     currentTables = getTables();
     selectedTable = currentTables.some((item) => item.name === selectedTable) ? selectedTable : "";
     refreshSummary();
@@ -727,19 +728,15 @@ function executeSql(forcedSql) {
     if (results.length) {
       renderExecResult(results, sqlText);
     } else {
-      const changes =
-        db.exec("SELECT changes() AS changes, total_changes() AS total_changes;")[0]?.values?.[0] || [0, 0];
-      const changeCount = Number(changes[0]) || 0;
-      const totalChanges = Number(changes[1]) || 0;
       if (ddlLike) {
         setResultStatus("结构已更新", "is-success");
-        renderMessage(`SQL 已执行。数据库结构已更新，总累计变更 ${totalChanges} 行。`, "info");
-      } else {
-        setResultStatus(`${changeCount} 行变更`, "is-success");
         renderMessage(
-          `SQL 已执行。变更 ${changeCount} 行，总累计变更 ${totalChanges} 行。`,
+          `SQL 已执行。数据库结构已更新，最近一次影响 ${rowsModified} 行。`,
           "info"
         );
+      } else {
+        setResultStatus(`${rowsModified} 行变更`, "is-success");
+        renderMessage(`SQL 已执行。变更 ${rowsModified} 行。`, "info");
       }
     }
 
