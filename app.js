@@ -516,7 +516,7 @@ function createEmptyDb() {
   selectedTable = "";
   renderLoadedWorkspace("已创建空数据库", "is-success");
   renderMessage("空数据库已创建，可以继续执行 SQL。", "info");
-  setQueryHint("Ctrl/Cmd + E 运行", "is-success");
+  setQueryHint("先选中 SQL 再执行", "is-success");
 }
 
 function importDbFromBytes(bytes, name = EMPTY_DB_NAME) {
@@ -528,7 +528,7 @@ function importDbFromBytes(bytes, name = EMPTY_DB_NAME) {
   selectedTable = "";
   renderLoadedWorkspace("数据库已导入", "is-success");
   renderMessage("数据库已导入，可以继续查询或修改。", "info");
-  setQueryHint("Ctrl/Cmd + E 运行", "is-success");
+  setQueryHint("先选中 SQL 再执行", "is-success");
 }
 
 function createSampleDb() {
@@ -544,9 +544,9 @@ function createSampleDb() {
     lastAutoPreviewSql = SAMPLE_SQL;
     renderQueryMeta(sqlEditor.value);
     renderSqlHighlight();
-    executeSql();
+    executeSql(SAMPLE_SQL);
     renderLoadedWorkspace("示例数据库已载入", "is-success");
-    setQueryHint("Ctrl/Cmd + E 运行", "is-success");
+    setQueryHint("已生成示例 SQL，先选中后执行", "is-success");
   } catch (error) {
     console.error(error);
     updateStatus("示例数据库加载失败", "is-error");
@@ -770,15 +770,47 @@ function selectTable(name) {
     syncSqlEditorScroll();
     editorContentSource = "auto";
     lastAutoPreviewSql = previewSql;
-    setQueryHint("表已选中，按 Ctrl/Cmd + E 运行", "is-success");
+    setQueryHint("表已选中，选中后执行", "is-success");
   } else {
     setQueryHint("表已选中，已保留当前 SQL", "is-success");
   }
   renderTablePreview(name);
 }
 
+function getSelectedSqlText() {
+  const start = sqlEditor.selectionStart ?? 0;
+  const end = sqlEditor.selectionEnd ?? 0;
+  if (end <= start) {
+    return "";
+  }
+
+  return sqlEditor.value.slice(start, end).trim();
+}
+
 function renderQueryMeta(text) {
-  queryMeta.textContent = `${text.length} chars`;
+  const selectedSql = getSelectedSqlText();
+  queryMeta.textContent = selectedSql
+    ? `${text.length} chars · 选中 ${selectedSql.length} chars`
+    : `${text.length} chars`;
+}
+
+function refreshEditorStatus() {
+  const selectedSql = getSelectedSqlText();
+  const hasText = Boolean(sqlEditor.value.trim());
+
+  renderQueryMeta(sqlEditor.value);
+
+  if (selectedSql) {
+    setQueryHint(`已选中 ${selectedSql.length} chars，按 Ctrl/Cmd + E 执行`, "is-success");
+    return;
+  }
+
+  if (hasText) {
+    setQueryHint("先选中 SQL 再执行", "");
+    return;
+  }
+
+  setQueryHint("先输入 SQL，再选中执行", "");
 }
 
 function clearEditorContent() {
@@ -790,7 +822,7 @@ function clearEditorContent() {
   renderQueryMeta(sqlEditor.value);
   renderSqlHighlight();
   syncSqlEditorScroll();
-  setQueryHint("Ctrl/Cmd + E 运行", "");
+  setQueryHint("先输入 SQL，再选中执行", "");
   sqlEditor.focus();
 }
 
@@ -801,11 +833,13 @@ function executeSql(forcedSql) {
     return;
   }
 
-  const sqlText = (forcedSql ?? sqlEditor.value).trim();
-  renderQueryMeta(sqlText);
+  const selectedSql = getSelectedSqlText();
+  const sqlText = (forcedSql ?? selectedSql).trim();
+  renderQueryMeta(sqlEditor.value);
   if (!sqlText) {
-    setResultStatus("空 SQL", "is-warning");
-    renderMessage("请输入 SQL 后再执行。", "warning");
+    setResultStatus("未选中 SQL", "is-warning");
+    renderMessage("请先在编辑器中选中要执行的 SQL 语句。", "warning");
+    setQueryHint("先选中 SQL 再执行", "is-warning");
     return;
   }
 
@@ -836,7 +870,17 @@ function executeSql(forcedSql) {
       }
     }
 
-    setQueryHint(selectLike ? "查询成功" : "执行成功", "is-success");
+    const executedFromSelection = typeof forcedSql !== "string";
+    setQueryHint(
+      executedFromSelection
+        ? selectLike
+          ? "已执行选中查询"
+          : "已执行选中语句"
+        : selectLike
+          ? "示例查询已执行"
+          : "示例语句已执行",
+      "is-success"
+    );
     updateStatus(selectLike ? "已查询" : "已修改", selectLike ? "is-success" : "is-warning");
     persistWorkspaceDb();
   } catch (error) {
@@ -858,8 +902,12 @@ sqlEditor.addEventListener("input", (event) => {
   syncSqlEditorScroll();
   editorContentSource = event.target.value.trim() ? "user" : "empty";
   debouncedSave(event.target.value);
-  setQueryHint("等待执行", "");
+  refreshEditorStatus();
 });
+
+sqlEditor.addEventListener("select", refreshEditorStatus);
+sqlEditor.addEventListener("mouseup", refreshEditorStatus);
+sqlEditor.addEventListener("keyup", refreshEditorStatus);
 
 sqlEditor.addEventListener("keydown", (event) => {
   const isRunHotkey =
@@ -1035,7 +1083,7 @@ function initFromStorage() {
   lastAutoPreviewSql = "";
   renderQueryMeta(sqlEditor.value);
   renderSqlHighlight();
-  setQueryHint("Ctrl/Cmd + E 运行", "");
+  setQueryHint(sqlEditor.value.trim() ? "先选中 SQL 再执行" : "先输入 SQL，再选中执行", "");
 }
 
 async function initSqlJsRuntime() {
