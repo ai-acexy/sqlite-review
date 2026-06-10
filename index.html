@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SQLite Review</title>
+    <script>
+      (() => {
+        try {
+          const key = "sqlite-review-workspace-split";
+          const saved = Number(localStorage.getItem(key));
+          const ratio = Number.isFinite(saved) && saved > 0 && saved < 1 ? saved : 0.42;
+          document.documentElement.style.setProperty("--workspace-split-initial", `${(ratio * 100).toFixed(2)}%`);
+        } catch {
+          document.documentElement.style.setProperty("--workspace-split-initial", "42%");
+        }
+      })();
+    </script>
     <meta
       name="description"
       content="在线 SQLite 预览与编辑工具，支持上传数据库、执行 SQL、查看表结构并导出 .sqlite 文件。"

@@ -145,6 +145,7 @@ button:disabled {
 }
 
 .layout {
+  height: calc(100vh - 64px);
   min-height: calc(100vh - 64px);
   padding: 12px;
   display: grid;
@@ -393,10 +394,11 @@ button:disabled {
 
 .workspace {
   min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  --workspace-split: 42%;
+  --workspace-split: var(--workspace-split-initial, 42%);
 }
 
 .editor-panel,
