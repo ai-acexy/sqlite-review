@@ -712,8 +712,7 @@ body[data-theme="dark"] .workspace-splitter::after {
   background: rgba(96, 165, 250, 0.45);
 }
 
-.workspace.is-dragging .sql-editor-shell,
-.workspace.is-dragging .result-panel {
+.workspace.is-dragging .sql-editor-shell {
   user-select: none;
 }
 
@@ -724,6 +723,7 @@ body[data-theme="dark"] .workspace-splitter::after {
   border-radius: 0;
   background: transparent;
   padding: 12px;
+  user-select: text;
 }
 
 .result-note {

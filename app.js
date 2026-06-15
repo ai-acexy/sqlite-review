@@ -1573,6 +1573,7 @@ function bindWorkspaceSplitter() {
     };
     workspace.classList.add("is-dragging");
     workspaceSplitter.setPointerCapture(event.pointerId);
+    event.preventDefault();
   });
 
   workspaceSplitter.addEventListener("pointermove", (event) => {
@@ -1584,9 +1585,10 @@ function bindWorkspaceSplitter() {
 
   const stopDrag = (event) => {
     if (!workspaceDragState) return;
-    if (event?.pointerId !== undefined) {
+    const pointerId = event?.pointerId ?? workspaceDragState.pointerId;
+    if (pointerId !== undefined) {
       try {
-        workspaceSplitter.releasePointerCapture(event.pointerId);
+        workspaceSplitter.releasePointerCapture(pointerId);
       } catch {}
     }
     workspace.classList.remove("is-dragging");
@@ -1595,6 +1597,9 @@ function bindWorkspaceSplitter() {
 
   workspaceSplitter.addEventListener("pointerup", stopDrag);
   workspaceSplitter.addEventListener("pointercancel", stopDrag);
+  workspaceSplitter.addEventListener("lostpointercapture", stopDrag);
+  window.addEventListener("blur", stopDrag);
+  window.addEventListener("pointerup", stopDrag);
 }
 
 function initFromStorage() {
