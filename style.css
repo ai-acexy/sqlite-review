@@ -562,7 +562,7 @@ button:disabled {
 
 .sql-token-keyword {
   color: var(--accent);
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .sql-token-function {
@@ -575,7 +575,7 @@ button:disabled {
 
 .sql-token-comment {
   color: var(--muted);
-  font-style: italic;
+  font-style: normal;
 }
 
 .sql-token-number {

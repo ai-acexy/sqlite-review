@@ -836,12 +836,12 @@ function getSelectedSqlText() {
     return "";
   }
 
-  return sqlEditor.value.slice(start, end).trim();
+  return sqlEditor.value.slice(start, end);
 }
 
 function renderQueryMeta(text) {
   const selectedSql = getSelectedSqlText();
-  queryMeta.textContent = selectedSql
+  queryMeta.textContent = selectedSql.trim()
     ? `${text.length} chars · 选中 ${selectedSql.length} chars`
     : `${text.length} chars`;
 }
@@ -1308,10 +1308,11 @@ async function copyEditorContent() {
 function refreshEditorStatus() {
   const selectedSql = getSelectedSqlText();
   const hasText = Boolean(sqlEditor.value.trim());
+  const hasSelectedSql = Boolean(selectedSql.trim());
 
   renderQueryMeta(sqlEditor.value);
 
-  if (selectedSql) {
+  if (hasSelectedSql) {
     setQueryHint(`已选中 ${selectedSql.length} chars，按 Ctrl/Cmd + E 执行`, "is-success");
     return;
   }
@@ -1345,9 +1346,9 @@ function executeSql(forcedSql) {
   }
 
   const selectedSql = getSelectedSqlText();
-  const sqlText = (forcedSql ?? selectedSql).trim();
+  const sqlText = forcedSql ?? selectedSql;
   renderQueryMeta(sqlEditor.value);
-  if (!sqlText) {
+  if (!sqlText.trim()) {
     setResultStatus("未选中 SQL", "is-warning");
     renderMessage("请先在编辑器中选中要执行的 SQL 语句。", "warning");
     setQueryHint("先选中 SQL 再执行", "is-warning");
