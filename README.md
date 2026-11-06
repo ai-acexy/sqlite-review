@@ -19,6 +19,7 @@ I created this minimal SQLite online preview and editing project for loading, qu
 - I implemented running SQL statements directly in the editor
 - I implemented table browsing and schema inspection from the left panel
 - I moved table preview results into the main result area
+- The loaded workspace replaces the import guide with compact database details and a horizontally scrollable schema table
 - I added SQL syntax highlighting in the editor
 - I added a draggable splitter to adjust the SQL and result area ratio
 - I added run, format, copy, and clear-editor actions in the SQL editor toolbar, plus a `Cmd/Ctrl + E` shortcut for executing selected SQL

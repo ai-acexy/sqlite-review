@@ -517,6 +517,7 @@ function resetWorkspaceView(statusText = "工作区已清空", statusType = "is-
     db.close();
   }
   db = null;
+  document.body.classList.remove("has-database");
   currentDbName = "";
   selectedTable = "";
   currentTables = [];
@@ -566,7 +567,8 @@ function createEmptyDb() {
   currentDbName = EMPTY_DB_NAME;
   selectedTable = "";
   renderLoadedWorkspace("已创建空数据库", "is-success");
-  renderMessage("空数据库已创建，可以继续执行 SQL。", "info");
+  setResultStatus("待执行", "");
+  renderMessage("空数据库已创建。在 SQL 编辑区编写并选中建表语句后执行。", "info");
   setQueryHint("先选中 SQL 再执行", "is-success");
 }
 
@@ -578,7 +580,8 @@ function importDbFromBytes(bytes, name = EMPTY_DB_NAME) {
   currentDbName = name || EMPTY_DB_NAME;
   selectedTable = "";
   renderLoadedWorkspace("数据库已导入", "is-success");
-  renderMessage("数据库已导入，可以继续查询或修改。", "info");
+  setResultStatus("待查询", "");
+  renderMessage("数据库已导入。点击左侧表名预览数据，或选中 SQL 后执行查询。", "info");
   setQueryHint("先选中 SQL 再执行", "is-success");
 }
 
@@ -613,6 +616,7 @@ function getDbExportBytes() {
 }
 
 function refreshSummary() {
+  document.body.classList.toggle("has-database", Boolean(db));
   const bytes = getDbExportBytes();
   dbName.textContent = currentDbName || "";
   dbSize.textContent = formatBytes(bytes.length);
@@ -686,13 +690,12 @@ function renderSchemaPanel(tableName) {
   parts.push(
     `<div class="pill-row">
       <span class="pill">表名：${escapeHtml(tableName)}</span>
-      <span class="pill">记录数：${escapeHtml(rowCount)}</span>
-      <span class="pill">预览：5 行</span>
+      <span class="pill">字段：${rows.length}</span>
     </div>`
   );
 
   if (rows.length) {
-    parts.push(`<table class="schema-table"><thead><tr>
+    parts.push(`<div class="schema-scroll" tabindex="0" role="region" aria-label="表结构，可横向滚动"><table class="schema-table"><thead><tr>
       <th>字段</th><th>类型</th><th>非空</th><th>默认值</th><th>主键</th>
     </tr></thead><tbody>`);
     for (const row of rows) {
@@ -706,7 +709,7 @@ function renderSchemaPanel(tableName) {
         </tr>`
       );
     }
-    parts.push(`</tbody></table>`);
+    parts.push(`</tbody></table></div>`);
   } else {
     parts.push(`<div class="empty-card">未能读取字段信息。</div>`);
   }
