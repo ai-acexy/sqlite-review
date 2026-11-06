@@ -919,10 +919,6 @@ body[data-theme="dark"] .drop-zone.is-dragover {
   padding: 3px 8px;
 }
 
-.editor-panel:focus-within {
-  border-color: var(--accent);
-}
-
 #sqlEditor::selection {
   background: var(--accent-soft);
 }
